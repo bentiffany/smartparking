@@ -42,7 +42,7 @@ static unsigned long current_count = 0;
 
 // accessible variables
 volatile unsigned long g_ulTimerInts = 0;
-volatile bool check_messages = false;
+volatile bool check_commands = false;
 
 
 //*****************************************************************************
@@ -75,7 +75,7 @@ slowTimerIntHandler(void)
     Timer_IF_InterruptClear(ulSlowBase);
 
     // Set a flag to check incoming messages
-    check_messages = true;
+    check_commands = true;
 }
 
 
