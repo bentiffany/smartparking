@@ -28,7 +28,7 @@
 
 // function definition includes
 #include "networking.h"
-#include "oled.h"
+#include "lights_sensors.h"
 
 // Application specific status/error codes
 typedef enum{
@@ -65,14 +65,14 @@ signed char    *g_Host = SERVER_NAME;
 SlDateTime g_time;
 
 // local variables
-static char current_command[MAX_CMD_CHARS] = "";
+static char current_command[MAX_CHAR_SIZE] = "";
 
 // accessible variables
 long lNetworkingRetVal = -1;
 
 // external variables
-extern char incoming_command[MAX_CMD_CHARS];
-extern bool update_garage_commands = false;
+extern char incoming_command[MAX_CHAR_SIZE];
+extern bool update_garage_commands;
 
 
 //*****************************************************************************
@@ -797,7 +797,7 @@ int updateShadowStatus(const char *message){
 int getShadowCommand(){
 
     // incoming variables
-    char command[MAX_CMD_CHARS];
+    char command[MAX_CHAR_SIZE];
 
     // initialize the message with a null
     command[0] = '\0';
@@ -815,8 +815,8 @@ int getShadowCommand(){
              * {
              *     internal_command[i] = command[i];
              * } */
-        } while (message[++i]);
-        strcpy(current_message, message);
+        } while (command[++i]);
+        strcpy(current_command, command);
         update_garage_commands = true;
     }
 

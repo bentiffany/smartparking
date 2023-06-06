@@ -43,6 +43,7 @@ static unsigned long current_count = 0;
 // accessible variables
 volatile unsigned long g_ulTimerInts = 0;
 volatile bool check_commands = false;
+volatile bool check_parking_spaces = false;
 
 
 //*****************************************************************************
@@ -64,6 +65,9 @@ fastTimerIntHandler(void)
     Timer_IF_InterruptClear(ulFastBase);
 
     g_ulTimerInts++;
+
+    // Set a flag to check the parking space statuses
+    check_parking_spaces = true;
 }
 
 
