@@ -40,8 +40,9 @@
 #define NUM_SPACES      8
 
 // constants for communication
-#define I2C_SWITCH_ADDR             0x20
-#define BASE_LIGHT_SENSOR_ADDR      0x20
+#define I2C_SWITCH_ADDR        0x70
+#define BASE_LIGHT_SENSOR_ADDR      0x13
+#define BASE_LIGHT_SWITCH_ADDR      0x40
 
 //*****************************************************************************
 //  function delays 3*ulCount cycles
@@ -67,6 +68,9 @@ void processSensorUpdates(void);
 
 /**************************************************************************/
 void updateStatusLEDs(void);
+
+/**************************************************************************/
+void testStatusLEDs(void);
 
 /**************************************************************************/
 bool prepareOutgoingString();

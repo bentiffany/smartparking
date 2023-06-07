@@ -34,7 +34,7 @@
 
 // Common interface include
 #include "uart_if.h"
-#include "i2c_if.c"
+#include "i2c_if.h"
 
 // other header includes
 #include "lights_sensors.h"
@@ -51,6 +51,7 @@ unsigned int color_options[NUM_COLORS] = {WHITE, BLUE, GREEN, CYAN, RED, MAGENTA
 // sensor variables
 unsigned int free_spaces = NUM_SPACES, num_cars = 0;
 bool occupied_spaces[NUM_SPACES];
+unsigned short int spaces_map[NUM_SPACES] = {1, 7, 6, 3, 5, 4, 2, 0};
 
 // variables for composing the content string for HTTP POST
 unsigned char * outgoing_message_string = NULL;
@@ -185,45 +186,87 @@ void resetSpaceStatus(void)
 
 
 //*****************************************************************************
-void checkSensorStatuses(void)
+void initProximitySensors(void)
 {
     // local variables
-    int i = NUM_SPACES;
-    bool status_has_changed = false;
+    int i;
 
-    unsigned char ucI2CSwitchAddr = I2C_SWITCH_ADDR, ucSwitchRegOffset;
-    unsigned char currentSensorAddr = BASE_LIGHT_SENSOR_ADDR, ucSensorRegOffset;
-    unsigned char dataBuf;
+    unsigned char ucI2CSwitchAddr = I2C_SWITCH_ADDR;
+    unsigned char currentSensorAddr = BASE_LIGHT_SENSOR_ADDR, ucSensorRegOffset = 0x80;
+    unsigned char dataBuf[16];
     int iRetVal = 0;
 
     // read in the current statuses
-    // set switch to read in the first device
-    ucSwitchRegOffset = 0x3;
-    iRetVal = I2C_IF_WRITE(ucI2CSwitchAddr, &ucSwitchRegOffset, 1, 0);
-    if (iRetVal != 0) {Report("Error writing sensor selection to I2C switch");};
-    // write through to the sensor
+    for (i = NUM_SPACES - 1; i >= 0; --i)
+    {
+        // set switch to access device i
+        dataBuf[0] = (unsigned char)i;
+        iRetVal = I2C_IF_Write(ucI2CSwitchAddr, &dataBuf, 1, 0);
+        if (iRetVal != 0) {Report("Error writing sensor selection to I2C switch");};
+        // write through to the sensor
+        iRetVal = I2C_IF_Write(currentSensorAddr, &ucSensorRegOffset, 1, 0);
+        if (iRetVal != 0) {Report("Error writing register selection to sensor");};
+        // read in the entire register
+        iRetVal = I2C_IF_Read(currentSensorAddr, &dataBuf, (unsigned char) 16);
+        if (iRetVal != 0) {Report("Error with read");};
+        // now update the values I care about
+        // Set proximity rate to 16 measurements per second
+        dataBuf[2] = 0x03;
+        ucSensorRegOffset += 2;
+        iRetVal = I2C_IF_Write(currentSensorAddr, &ucSensorRegOffset, 1, 0);
+        if (iRetVal != 0) {Report("Error writing register selection to sensor");};
+        iRetVal = I2C_IF_Write(ucI2CSwitchAddr, &dataBuf + 2, 1, 0);
+        if (iRetVal != 0) {Report("Error writing sensor selection to I2C switch");};
+        // Set LED current to 100 mA
+        dataBuf[3] = (unsigned char) 10;
+        ucSensorRegOffset += 1;
+        iRetVal = I2C_IF_Write(currentSensorAddr, &ucSensorRegOffset, 1, 0);
+        if (iRetVal != 0) {Report("Error writing register selection to sensor");};
+        iRetVal = I2C_IF_Write(ucI2CSwitchAddr, &dataBuf + 3, 1, 0);
+        if (iRetVal != 0) {Report("Error writing sensor selection to I2C switch");};
+        // Set Ambient light parameters
+        dataBuf[4] |= 1 << 6; // continuous conversion mode (faster)
+        dataBuf[4] |= 6 << 5; // 8 samples / second
+        dataBuf[4] &= ~(1UL << 3);
+        ucSensorRegOffset += 1;
+        iRetVal = I2C_IF_Write(currentSensorAddr, &ucSensorRegOffset, 1, 0);
+        if (iRetVal != 0) {Report("Error writing register selection to sensor");};
+        iRetVal = I2C_IF_Write(ucI2CSwitchAddr, &dataBuf + 4, 1, 0);
+        if (iRetVal != 0) {Report("Error writing sensor selection to I2C switch");};
+        // configuration updated
+    }
+
+}
 
 
-    /* Reference I2C
-        // read acceleration in x and y from I2C
-        unsigned char ucDevAddr = 0x18, ucRegOffset;
-        unsigned char dataBuf;
-        int iRetVal = 0;
-        ucRegOffset = (unsigned char) 0x3;
-        iRetVal = I2C_IF_Write(ucDevAddr, &ucRegOffset, 1, 0);
-        if (iRetVal != 0) {Report("Error with write");};
-        iRetVal = I2C_IF_Read(ucDevAddr, &dataBuf, (unsigned char) 1);
+//*****************************************************************************
+void checkSensorStatuses(void)
+{
+    // local variables
+    int i;
+    bool status_has_changed = false;
+
+    unsigned char ucI2CSwitchAddr = I2C_SWITCH_ADDR;
+    unsigned char currentSensorAddr = BASE_LIGHT_SENSOR_ADDR, ucSensorRegOffset = 0x80;
+    unsigned char dataBuf[16];
+    int iRetVal = 0;
+
+    // read in the current statuses
+    for (i = NUM_SPACES - 1; i >= 0; --i)
+    {
+        // set switch to access device i
+        dataBuf[0] = (unsigned char)i;
+        iRetVal = I2C_IF_Write(ucI2CSwitchAddr, &dataBuf, 1, 0);
+        if (iRetVal != 0) {Report("Error writing sensor selection to I2C switch");};
+        // write through to the sensor
+        iRetVal = I2C_IF_Write(currentSensorAddr, &ucSensorRegOffset, 1, 0);
+        if (iRetVal != 0) {Report("Error writing register selection to sensor");};
+        // read in the entire register
+        iRetVal = I2C_IF_Read(currentSensorAddr, &dataBuf, (unsigned char) 16);
         if (iRetVal != 0) {Report("Error with read");};
-        *acc_x = (int) (signed char) dataBuf;
-        *acc_x = *acc_x - acc_zero_x;
-        ucRegOffset = (unsigned char) 0x5;
-        iRetVal = I2C_IF_Write(ucDevAddr, &ucRegOffset, 1, 0);
-        if (iRetVal != 0) {Report("Error with write");};
-        iRetVal = I2C_IF_Read(ucDevAddr, &dataBuf, (unsigned char) 1);
-        if (iRetVal != 0) {Report("Error with read");};
-        *acc_y = (int) (signed char) dataBuf;
-        *acc_y = *acc_y - acc_zero_y;
-    */
+        // now trigger the sensor read
+
+    }
 
     // compare each one, and change the flag if they've changed
 
@@ -278,8 +321,52 @@ void updateStatusLEDs(void)
 {
 
     // update the status LEDs
+    int i = NUM_SPACES - 1;
+
+    unsigned char ucI2CSwitchAddr = BASE_LIGHT_SWITCH_ADDR;
+    unsigned char dataBuf = 0x00;
+    int iRetVal = 0;
+
+    // read in the current statuses
+
+    for (i; i >= 0; --i)
+    {
+        // loop through each light, setting it's state
+        // green is high, red is low
+        if (!occupied_spaces[i])
+        {
+            dataBuf |= (1<<i);
+        }
+    }
+
+    // write light selection, also
+    // shift address to the right by 1 for the 7-bit address
+    iRetVal = I2C_IF_Write(ucI2CSwitchAddr >> 1, &dataBuf, 1, true);
+    if (iRetVal != 0) {Report("Error writing sensor selection to io expander");};
+
+}
 
 
+/**************************************************************************/
+void testStatusLEDs(void)
+{
+    // run a test routine
+    int m;
+    for(m = 0; m < NUM_SPACES; ++m)
+    {
+        occupied_spaces[m] = 0;
+    }
+    for (m = 0; m < NUM_SPACES; ++m)
+    {
+        occupied_spaces[spaces_map[m]] = 1;
+        updateStatusLEDs();
+        MAP_UtilsDelay(2500000);
+    }
+    for(m = 0; m < NUM_SPACES; ++m)
+    {
+        occupied_spaces[m] = 0;
+    }
+    updateStatusLEDs();
 
 }
 

@@ -62,11 +62,11 @@ void PinMuxConfig(void)
     MAP_PinModeSet(PIN_03, PIN_MODE_0);
     MAP_PinModeSet(PIN_04, PIN_MODE_0);
     MAP_PinModeSet(PIN_06, PIN_MODE_0);
-    MAP_PinModeSet(PIN_08, PIN_MODE_0);
     MAP_PinModeSet(PIN_15, PIN_MODE_0);
     MAP_PinModeSet(PIN_18, PIN_MODE_0);
     MAP_PinModeSet(PIN_21, PIN_MODE_0);
     MAP_PinModeSet(PIN_45, PIN_MODE_0);
+    MAP_PinModeSet(PIN_50, PIN_MODE_0);
     MAP_PinModeSet(PIN_52, PIN_MODE_0);
     MAP_PinModeSet(PIN_53, PIN_MODE_0);
     MAP_PinModeSet(PIN_58, PIN_MODE_0);
@@ -117,9 +117,9 @@ void PinMuxConfig(void)
     MAP_PinTypeI2C(PIN_02, PIN_MODE_1);
 
     //
-    // Configure PIN_50 for SPI0 GSPI_CS
+    // Configure PIN_08 for SPI0 GSPI_CS
     //
-    MAP_PinTypeSPI(PIN_50, PIN_MODE_9);
+    MAP_PinTypeSPI(PIN_08, PIN_MODE_7);
 
     //
     // Configure PIN_05 for SPI0 GSPI_CLK

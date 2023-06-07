@@ -101,7 +101,7 @@ void initTimers()
     // Turn on the timers feeding values in microseconds
     //
     // timer for faster things like checking parking space statuses
-    Timer_IF_Start(ulFastBase, TIMER_A, 1000);
+    Timer_IF_Start(ulFastBase, TIMER_A, 500000);
     // timer for slower things like polling AWS messages
     Timer_IF_Start(ulSlowBase, TIMER_A, 2000000);
 

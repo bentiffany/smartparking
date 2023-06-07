@@ -248,6 +248,11 @@ main(void)
     MAP_PRCMPeripheralClkEnable(PRCM_GSPI,PRCM_RUN_MODE_CLK);
 
     //
+    // I2C Init
+    //
+    I2C_IF_Open(I2C_MASTER_MODE_FST);
+
+    //
     // Initializing the Terminal.
     //
     InitTerm();
@@ -285,8 +290,8 @@ main(void)
     drawTitle();
     drawInfo();
 
-    // Initialize all of the I2C devices
-
+    // Test all of the I2C devices
+    testStatusLEDs();
 
     // Loop forever while the timers run.
     //
