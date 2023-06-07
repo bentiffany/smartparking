@@ -34,6 +34,7 @@
 
 // Common interface include
 #include "uart_if.h"
+#include "i2c_if.c"
 
 // other header includes
 #include "lights_sensors.h"
@@ -186,10 +187,43 @@ void resetSpaceStatus(void)
 //*****************************************************************************
 void checkSensorStatuses(void)
 {
+    // local variables
     int i = NUM_SPACES;
     bool status_has_changed = false;
 
+    unsigned char ucI2CSwitchAddr = I2C_SWITCH_ADDR, ucSwitchRegOffset;
+    unsigned char currentSensorAddr = BASE_LIGHT_SENSOR_ADDR, ucSensorRegOffset;
+    unsigned char dataBuf;
+    int iRetVal = 0;
+
     // read in the current statuses
+    // set switch to read in the first device
+    ucSwitchRegOffset = 0x3;
+    iRetVal = I2C_IF_WRITE(ucI2CSwitchAddr, &ucSwitchRegOffset, 1, 0);
+    if (iRetVal != 0) {Report("Error writing sensor selection to I2C switch");};
+    // write through to the sensor
+
+
+    /* Reference I2C
+        // read acceleration in x and y from I2C
+        unsigned char ucDevAddr = 0x18, ucRegOffset;
+        unsigned char dataBuf;
+        int iRetVal = 0;
+        ucRegOffset = (unsigned char) 0x3;
+        iRetVal = I2C_IF_Write(ucDevAddr, &ucRegOffset, 1, 0);
+        if (iRetVal != 0) {Report("Error with write");};
+        iRetVal = I2C_IF_Read(ucDevAddr, &dataBuf, (unsigned char) 1);
+        if (iRetVal != 0) {Report("Error with read");};
+        *acc_x = (int) (signed char) dataBuf;
+        *acc_x = *acc_x - acc_zero_x;
+        ucRegOffset = (unsigned char) 0x5;
+        iRetVal = I2C_IF_Write(ucDevAddr, &ucRegOffset, 1, 0);
+        if (iRetVal != 0) {Report("Error with write");};
+        iRetVal = I2C_IF_Read(ucDevAddr, &dataBuf, (unsigned char) 1);
+        if (iRetVal != 0) {Report("Error with read");};
+        *acc_y = (int) (signed char) dataBuf;
+        *acc_y = *acc_y - acc_zero_y;
+    */
 
     // compare each one, and change the flag if they've changed
 

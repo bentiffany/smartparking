@@ -39,6 +39,9 @@
 // constants for parking layout/status
 #define NUM_SPACES      8
 
+// constants for communication
+#define I2C_SWITCH_ADDR             0x20
+#define BASE_LIGHT_SENSOR_ADDR      0x20
 
 //*****************************************************************************
 //  function delays 3*ulCount cycles
