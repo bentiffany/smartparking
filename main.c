@@ -286,12 +286,13 @@ main(void)
         ERR_PRINT(lNetworkingRetVal);
     }
 
+    // Test all of the I2C devices
+    initProximitySensors();
+    testStatusLEDs();
+
     // Draw the initial info on the display
     drawTitle();
     drawInfo();
-
-    // Test all of the I2C devices
-    testStatusLEDs();
 
     // Loop forever while the timers run.
     //

@@ -40,7 +40,7 @@
 #define NUM_SPACES      8
 
 // constants for communication
-#define I2C_SWITCH_ADDR        0x70
+#define I2C_SWITCH_ADDR             0x70
 #define BASE_LIGHT_SENSOR_ADDR      0x13
 #define BASE_LIGHT_SWITCH_ADDR      0x40
 
