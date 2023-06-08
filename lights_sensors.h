@@ -44,10 +44,6 @@
 #define BASE_LIGHT_SENSOR_ADDR      0x13
 #define BASE_LIGHT_SWITCH_ADDR      0x40
 
-//*****************************************************************************
-//  function delays 3*ulCount cycles
-void delay(unsigned long ulCount);
-
 /**************************************************************************/
 void drawTitle(void);
 
@@ -59,6 +55,9 @@ void clearData(void);
 
 /**************************************************************************/
 void resetIncomingCommand(void);
+
+/**************************************************************************/
+void initProximitySensors(void);
 
 /**************************************************************************/
 void checkSensorStatuses(void);

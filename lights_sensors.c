@@ -39,6 +39,7 @@
 // other header includes
 #include "lights_sensors.h"
 #include "networking.h"
+#include "Adafruit_VCNL4010.h"
 
 extern int cursor_x;
 extern int cursor_y;
@@ -192,7 +193,6 @@ void initProximitySensors(void)
     int i;
 
     unsigned char ucI2CSwitchAddr = I2C_SWITCH_ADDR;
-    unsigned char currentSensorAddr = BASE_LIGHT_SENSOR_ADDR, ucSensorRegOffset = 0x80;
     unsigned char dataBuf[16];
     unsigned char *dataPtr = dataBuf;
     int iRetVal = 0;
@@ -201,39 +201,13 @@ void initProximitySensors(void)
     for (i = NUM_SPACES - 1; i >= 0; --i)
     {
         // set switch to access device i
-        *dataBuf = (unsigned char)i;
-        iRetVal = I2C_IF_Write(ucI2CSwitchAddr, dataBuf, 1, 0);
+        *dataPtr = (unsigned char) (1UL << i);
+        iRetVal = I2C_IF_Write(ucI2CSwitchAddr, dataPtr, 1, 1);
         if (iRetVal != 0) {Report("Error writing sensor selection to I2C switch");};
-        // write through to the sensor
-        iRetVal = I2C_IF_Write(currentSensorAddr, &ucSensorRegOffset, 1, 1);
-        if (iRetVal != 0) {Report("Error writing register selection to sensor");};
-        // read in half the register
-        iRetVal = I2C_IF_Read(currentSensorAddr, dataBuf, (unsigned char) 8);
-        if (iRetVal != 0) {Report("Error with read");};
-        // now update the values I care about
-        // Set proximity rate to 16 measurements per second
-        dataBuf[2] = 0x03;
-        ucSensorRegOffset += 2;
-        iRetVal = I2C_IF_Write(currentSensorAddr, &ucSensorRegOffset, 1, 0);
-        if (iRetVal != 0) {Report("Error writing register selection to sensor");};
-        iRetVal = I2C_IF_Write(ucI2CSwitchAddr, dataBuf + 2, 1, 0);
-        if (iRetVal != 0) {Report("Error writing sensor selection to I2C switch");};
-        // Set LED current to 100 mA
-        dataBuf[3] = (unsigned char) 10;
-        ucSensorRegOffset += 1;
-        iRetVal = I2C_IF_Write(currentSensorAddr, &ucSensorRegOffset, 1, 0);
-        if (iRetVal != 0) {Report("Error writing register selection to sensor");};
-        iRetVal = I2C_IF_Write(ucI2CSwitchAddr, dataBuf + 3, 1, 0);
-        if (iRetVal != 0) {Report("Error writing sensor selection to I2C switch");};
-        // Set Ambient light parameters
-        dataBuf[4] |= 1 << 6; // continuous conversion mode (faster)
-        dataBuf[4] |= 6 << 5; // 8 samples / second
-        dataBuf[4] &= ~(1UL << 3);
-        ucSensorRegOffset += 1;
-        iRetVal = I2C_IF_Write(currentSensorAddr, &ucSensorRegOffset, 1, 0);
-        if (iRetVal != 0) {Report("Error writing register selection to sensor");};
-        iRetVal = I2C_IF_Write(ucI2CSwitchAddr, dataBuf + 4, 1, 0);
-        if (iRetVal != 0) {Report("Error writing sensor selection to I2C switch");};
+
+        // initialize the sensor
+        Adafruit_VCNL4010_begin();
+
         // configuration updated
     }
 
@@ -258,6 +232,10 @@ void checkSensorStatuses(void)
     // read in the current statuses
     for (i = NUM_SPACES - 1; i >= 0; --i)
     {
+
+        // shift address to the right by 1 for the 7-bit address
+        iRetVal = I2C_IF_Write(ucI2CSwitchAddr >> 1, &dataBuf, 1, true);
+        if (iRetVal != 0) {Report("Error writing sensor selection to io expander");};
         // set switch to access device i
         dataBuf[0] = (unsigned char)i;
         iRetVal = I2C_IF_Write(ucI2CSwitchAddr, &dataBuf, 1, 0);

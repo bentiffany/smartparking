@@ -252,6 +252,10 @@ main(void)
     //
     I2C_IF_Open(I2C_MASTER_MODE_FST);
 
+    // Test all of the I2C devices
+    testStatusLEDs();
+//    initProximitySensors();
+
     //
     // Initializing the Terminal.
     //
@@ -271,6 +275,10 @@ main(void)
     // clear screen
     fillScreen(BLACK);
 
+    // Draw the initial info on the display
+    drawTitle();
+    drawInfo();
+
     // CC3200 SimpleLink WIFI initialization
     // Connect the CC3200 to the local access point
     lNetworkingRetVal = connectToAccessPoint();
@@ -286,13 +294,14 @@ main(void)
         ERR_PRINT(lNetworkingRetVal);
     }
 
-    // Test all of the I2C devices
-    initProximitySensors();
-    testStatusLEDs();
-
-    // Draw the initial info on the display
-    drawTitle();
-    drawInfo();
+    // quick checkoff test
+    char myMessage[] = "6";
+    int returnStatus = updateShadowStatus((const char*) myMessage);
+    if (returnStatus != 0)
+    {
+        // there was an error
+        Report("There was an error updating the shadow status");
+    }
 
     // Loop forever while the timers run.
     //
