@@ -65,7 +65,6 @@ void PinMuxConfig(void)
     MAP_PinModeSet(PIN_15, PIN_MODE_0);
     MAP_PinModeSet(PIN_18, PIN_MODE_0);
     MAP_PinModeSet(PIN_21, PIN_MODE_0);
-    MAP_PinModeSet(PIN_45, PIN_MODE_0);
     MAP_PinModeSet(PIN_50, PIN_MODE_0);
     MAP_PinModeSet(PIN_52, PIN_MODE_0);
     MAP_PinModeSet(PIN_53, PIN_MODE_0);
@@ -78,6 +77,7 @@ void PinMuxConfig(void)
     //
     MAP_PRCMPeripheralClkEnable(PRCM_GPIOA0, PRCM_RUN_MODE_CLK);
     MAP_PRCMPeripheralClkEnable(PRCM_GPIOA1, PRCM_RUN_MODE_CLK);
+    MAP_PRCMPeripheralClkEnable(PRCM_GPIOA3, PRCM_RUN_MODE_CLK);
     MAP_PRCMPeripheralClkEnable(PRCM_I2CA0, PRCM_RUN_MODE_CLK);
     MAP_PRCMPeripheralClkEnable(PRCM_GSPI, PRCM_RUN_MODE_CLK);
     MAP_PRCMPeripheralClkEnable(PRCM_UARTA0, PRCM_RUN_MODE_CLK);
@@ -105,6 +105,12 @@ void PinMuxConfig(void)
     //
     MAP_PinTypeGPIO(PIN_63, PIN_MODE_0, false);
     MAP_GPIODirModeSet(GPIOA1_BASE, 0x1, GPIO_DIR_MODE_OUT);
+
+    //
+    // Configure PIN_45 for GPIO Output - I2C Reset
+    //
+    MAP_PinTypeGPIO(PIN_45, PIN_MODE_0, false);
+    MAP_GPIODirModeSet(GPIOA3_BASE, 0x80, GPIO_DIR_MODE_OUT);
 
     //
     // Configure PIN_01 for I2C0 I2C_SCL

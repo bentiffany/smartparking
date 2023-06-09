@@ -210,23 +210,18 @@ void Adafruit_VCNL4010_setFrequency(vcnl4010_freq freq) {
 /**************************************************************************/
 
 uint16_t Adafruit_VCNL4010_readProximity(void) {
-  uint8_t i = Adafruit_VCNL4010_read8(VCNL4010_INTSTAT);
-  i &= ~0x80;
-  Adafruit_VCNL4010_write8(VCNL4010_INTSTAT, i);
-  MAP_UtilsDelay(1000);
-
-  Adafruit_VCNL4010_write8(VCNL4010_COMMAND, VCNL4010_MEASUREPROXIMITY);
-  MAP_UtilsDelay(1000);
-  while (1) {
-    // Serial.println(Adafruit_VCNL4010_read8(VCNL4010_INTSTAT), HEX);
-    uint8_t result = Adafruit_VCNL4010_read8(VCNL4010_COMMAND);
-    // Serial.print("Ready = 0x"); Serial.println(result, HEX);
-    if (result & VCNL4010_PROXIMITYREADY) {
-      MAP_UtilsDelay(100);
-      return Adafruit_VCNL4010_read16(VCNL4010_PROXIMITYDATA);
-    }
+    Adafruit_VCNL4010_write8(VCNL4010_COMMAND, VCNL4010_MEASUREPROXIMITY);
+    MAP_UtilsDelay(1000);
+    while (1) {
+        // Serial.println(Adafruit_VCNL4010_read8(VCNL4010_INTSTAT), HEX);
+        uint8_t result = Adafruit_VCNL4010_read8(VCNL4010_COMMAND);
+        // Serial.print("Ready = 0x"); Serial.println(result, HEX);
+        if (result & VCNL4010_PROXIMITYREADY) {
+            MAP_UtilsDelay(100);
+            return Adafruit_VCNL4010_read16(VCNL4010_PROXIMITYDATA);
+        }
     MAP_UtilsDelay(500);
-  }
+    }
 }
 
 /**************************************************************************/

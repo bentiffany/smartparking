@@ -267,6 +267,7 @@ main(void)
     MAP_UtilsDelay(10000);
 
     // Test all of the I2C devices
+    resetI2CDevices();
     testStatusLEDs();
     Report("\n\rinitProximitySensors\n\r");
     initProximitySensors();

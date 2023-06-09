@@ -186,6 +186,17 @@ void resetSpaceStatus(void)
 }
 
 
+/**************************************************************************/
+void resetI2CDevices(void)
+{
+    // RESET I2C devices
+    GPIOPinWrite (I2C_RESET_GPIO_BASE, I2C_RESET_PIN_OFFSET, 0x00);
+    MAP_UtilsDelay(200000);
+    GPIOPinWrite (I2C_RESET_GPIO_BASE, I2C_RESET_PIN_OFFSET, I2C_RESET_PIN_OFFSET);
+    MAP_UtilsDelay(200000);
+}
+
+
 //*****************************************************************************
 void initProximitySensors(void)
 {
@@ -209,7 +220,7 @@ void initProximitySensors(void)
         Adafruit_VCNL4010_begin();
 
         // configuration updated, add a short pause
-        MAP_UtilsDelay(20000);
+        MAP_UtilsDelay(10000);
     }
 
 }
@@ -233,16 +244,27 @@ void checkSensorStatuses(void)
     // read in the current statuses
     for (i = 0; i < NUM_SPACES; ++i)
     {
+        if (i == 5 || i == 3)
+        {
+            sensor_readings[i] = 2000;
+            continue;
+        }
         currentSensor = (unsigned char) (1UL << i);
         // shift address to the right by 1 for the 7-bit address
         iRetVal = I2C_IF_Write(ucI2CSwitchAddr, &currentSensor, 1, true);
         if (iRetVal != 0) {Report("Error writing sensor selection to I2C switch");};
 
+        MAP_UtilsDelay(1000);
+
+        if (i == 5)
+        {
+            sensor_readings[i] = 2000;
+        }
         // now read a proximity reading
         sensor_readings[i] = Adafruit_VCNL4010_readProximity();
 
         // I2C doesn't like switching too quickly... add a short pause
-        MAP_UtilsDelay(1000);
+        MAP_UtilsDelay(10000);
     }
 
     for (i = 0; i < NUM_SPACES; ++i)

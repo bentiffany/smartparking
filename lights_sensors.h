@@ -15,6 +15,9 @@
 // Standard includes
 #include <stdbool.h>
 
+// driverlib includes
+#include "hw_memmap.h"
+
 // Color definitions
 #define BLACK           0x0000
 #define BLUE            0x001F
@@ -43,6 +46,8 @@
 #define I2C_SWITCH_ADDR             0x70
 #define BASE_LIGHT_SENSOR_ADDR      0x13
 #define BASE_LIGHT_SWITCH_ADDR      0x20
+#define I2C_RESET_GPIO_BASE         GPIOA3_BASE
+#define I2C_RESET_PIN_OFFSET        0x80
 
 // threshold for proximity
 #define PROX_THRESHOLD              6000
@@ -58,6 +63,9 @@ void clearData(void);
 
 /**************************************************************************/
 void resetIncomingCommand(void);
+
+/**************************************************************************/
+void resetI2CDevices(void);
 
 /**************************************************************************/
 void initProximitySensors(void);

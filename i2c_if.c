@@ -51,9 +51,14 @@
 #include "rom.h"
 #include "rom_map.h"
 #include "prcm.h"
+#include "gpio.h"
+#include "utils.h"
 
 // Common interface include
 #include "i2c_if.h"
+
+// extra includes
+#include "lights_sensors.h"
 
 //*****************************************************************************
 //                      MACRO DEFINITIONS
@@ -71,6 +76,7 @@
 //                      LOCAL FUNCTION DEFINITIONS
 //****************************************************************************
 static int I2CTransact(unsigned long ulCmd);
+static int I2CTransactNACKProof(unsigned long ulCmd);
 
 
 //****************************************************************************
@@ -117,6 +123,10 @@ I2CTransact(unsigned long ulCmd)
         {
             return FAILURE;
         }
+        if ((MAP_I2CMasterIntStatusEx(I2C_BASE, false) & I2C_MASTER_INT_NACK) > 0)
+        {
+            return -2; // -2 for NACK
+        }
     }
 
     //
@@ -149,6 +159,84 @@ I2CTransact(unsigned long ulCmd)
 
 //****************************************************************************
 //
+//! Invokes the transaction over I2C
+//!
+//! \param ulCmd is the command to be executed over I2C
+//!
+//! This function works in a polling mode,
+//!    1. Initiates the transfer of the command.
+//!    2. Waits for the I2C transaction completion
+//!    3. Check for any error in transaction
+//!    4. Clears the master interrupt
+//!
+//! \return 0: Success, < 0: Failure.
+//
+//****************************************************************************
+static int
+I2CTransactNACKProof(unsigned long ulCmd)
+{
+    //
+    // Clear all interrupts
+    //
+    MAP_I2CMasterIntClear(I2C_BASE);
+
+    //
+    // Set the time-out. Not to be used with breakpoints.
+    //
+    MAP_I2CMasterTimeoutSet(I2C_BASE, I2C_TIMEOUT_VAL);
+
+    //
+    // Initiate the transfer.
+    //
+    MAP_I2CMasterControl(I2C_BASE, ulCmd);
+
+    //
+    // Wait until the current byte has been transferred.
+    // Poll on the raw interrupt status.
+    //
+    while((MAP_I2CMasterIntStatusEx(I2C_BASE, false)
+                & I2C_MASTER_INT_DATA) == 0)
+    {
+        if ((MAP_I2CMasterIntStatusEx(I2C_BASE, false) & I2C_MASTER_INT_TIMEOUT) > 0)
+        {
+            return FAILURE;
+        }
+        if ((MAP_I2CMasterIntStatusEx(I2C_BASE, false) & I2C_MASTER_INT_NACK) > 0)
+        {
+            return -2; // -2 for NACK
+        }
+    }
+
+    //
+    // Check for any errors in transfer
+    //
+    if(MAP_I2CMasterErr(I2C_BASE) != I2C_MASTER_ERR_NONE)
+    {
+        switch(ulCmd)
+        {
+        case I2C_MASTER_CMD_BURST_SEND_START:
+        case I2C_MASTER_CMD_BURST_SEND_CONT:
+        case I2C_MASTER_CMD_BURST_SEND_STOP:
+            MAP_I2CMasterControl(I2C_BASE,
+                         I2C_MASTER_CMD_BURST_SEND_ERROR_STOP);
+            break;
+        case I2C_MASTER_CMD_BURST_RECEIVE_START:
+        case I2C_MASTER_CMD_BURST_RECEIVE_CONT:
+        case I2C_MASTER_CMD_BURST_RECEIVE_FINISH:
+            MAP_I2CMasterControl(I2C_BASE,
+                         I2C_MASTER_CMD_BURST_RECEIVE_ERROR_STOP);
+            break;
+        default:
+            break;
+        }
+        return -3; // -3 for transaction error
+    }
+
+    return SUCCESS;
+}
+
+//****************************************************************************
+//
 //! Invokes the I2C driver APIs to write to the specified address
 //!
 //! \param ucDevAddr is the 7-bit I2C slave address
@@ -171,51 +259,117 @@ I2C_IF_Write(unsigned char ucDevAddr,
 {
     RETERR_IF_TRUE(pucData == NULL);
     RETERR_IF_TRUE(ucLen == 0);
-    //
-    // Set I2C codec slave address
-    //
-    MAP_I2CMasterSlaveAddrSet(I2C_BASE, ucDevAddr, false);
-    //
-    // Write the first byte to the controller.
-    //
-    MAP_I2CMasterDataPut(I2C_BASE, *pucData);
-    //
-    // Initiate the transfer.
-    //
-    RET_IF_ERR(I2CTransact(I2C_MASTER_CMD_BURST_SEND_START));
-    //
-    // Decrement the count and increment the data pointer
-    // to facilitate the next transfer
-    //
-    ucLen--;
-    pucData++;
-    //
-    // Loop until the completion of transfer or error
-    //
-    while(ucLen)
+
+    unsigned char _o_ucDevAddr = ucDevAddr;
+    unsigned char * _o_pucData = pucData;
+    unsigned char _o_ucLen = ucLen;
+    unsigned char _o_ucStop = ucStop;
+    int myReturn = 0;
+    int repeatTimes = 0;
+
+    do
     {
+        if (myReturn != 0)
+        {
+            ++repeatTimes;
+            MAP_UtilsDelay(10000);
+            myReturn = 0;
+        }
+        if (myReturn != 0 && repeatTimes > 2)
+        {
+            // Reset everything, this is a repeated loop
+            // FULL DEVICE RESET
+            MAP_I2CMasterIntClear(I2C_BASE);
+
+            MAP_I2CMasterDisable(I2C_BASE);
+            MAP_PRCMPeripheralReset(PRCM_I2CA0);
+
+            MAP_I2CMasterEnable(I2C_BASE);
+
+            // reset I2C devices
+            resetI2CDevices();
+
+            // Clear all interrupts.
+            MAP_I2CMasterIntClear(I2C_BASE);
+
+            // Enable interrupts.
+            MAP_I2CMasterIntEnableEx(I2C_BASE,
+                                     I2C_MASTER_INT_TIMEOUT |        // timeout
+                                     I2C_MASTER_INT_DATA            // data transaction complete
+                                    );
+
+            MAP_I2CMasterInitExpClk(I2C_BASE,SYS_CLK,true);
+
+            if (repeatTimes > 10)
+            {
+                return FAILURE;
+            }
+
+        }
+        ucDevAddr = _o_ucDevAddr;
+        pucData = _o_pucData;
+        ucLen = _o_ucLen;
+        ucStop = _o_ucStop;
         //
-        // Write the next byte of data
+        // Set I2C codec slave address
+        //
+        MAP_I2CMasterSlaveAddrSet(I2C_BASE, ucDevAddr, false);
+        //
+        // Write the first byte to the controller.
         //
         MAP_I2CMasterDataPut(I2C_BASE, *pucData);
         //
-        // Transact over I2C to send byte
+        // Initiate the transfer.
         //
-        RET_IF_ERR(I2CTransact(I2C_MASTER_CMD_BURST_SEND_CONT));
+        myReturn = I2CTransactNACKProof(I2C_MASTER_CMD_BURST_SEND_START);
+        if (myReturn != 0)
+        {
+            continue;
+        }
         //
         // Decrement the count and increment the data pointer
         // to facilitate the next transfer
         //
         ucLen--;
         pucData++;
-    }
-    //
-    // If stop bit is to be sent, send it.
-    //
-    if(ucStop == true)
-    {
-        RET_IF_ERR(I2CTransact(I2C_MASTER_CMD_BURST_SEND_STOP));
-    }
+        //
+        // Loop until the completion of transfer or error
+        //
+        while(ucLen)
+        {
+            //
+            // Write the next byte of data
+            //
+            MAP_I2CMasterDataPut(I2C_BASE, *pucData);
+            //
+            // Transact over I2C to send byte
+            //
+            myReturn = I2CTransactNACKProof(I2C_MASTER_CMD_BURST_SEND_CONT);
+            if (myReturn != 0)
+            {
+                break;
+            }
+            //
+            // Decrement the count and increment the data pointer
+            // to facilitate the next transfer
+            //
+            ucLen--;
+            pucData++;
+        }
+        if (myReturn != 0)
+        {
+            // restart transaction
+            continue;
+        }
+        //
+        // If stop bit is to be sent, send it.
+        //
+        if(ucStop == true)
+        {
+            RET_IF_ERR(I2CTransactNACKProof(I2C_MASTER_CMD_BURST_SEND_STOP));
+        }
+    } while (myReturn != 0 && myReturn >= -3 && myReturn <= -2);
+    RET_IF_ERR(myReturn);
 
     return SUCCESS;
 }
@@ -245,6 +399,8 @@ I2C_IF_Read(unsigned char ucDevAddr,
 
     RETERR_IF_TRUE(pucData == NULL);
     RETERR_IF_TRUE(ucLen == 0);
+
+    int myReturn = 0;
     //
     // Set I2C codec slave address
     //
@@ -266,10 +422,15 @@ I2C_IF_Read(unsigned char ucDevAddr,
         //
         ulCmdID = I2C_MASTER_CMD_BURST_RECEIVE_START;
     }
+    unsigned char _o_ucDevAddr = ucDevAddr;
+    unsigned char * _o_pucData = pucData;
+    unsigned char _o_ucLen = ucLen;
+    unsigned long _o_ulCmdID = ulCmdID;
     //
     // Initiate the transfer.
     //
-    RET_IF_ERR(I2CTransact(ulCmdID));
+
+    myReturn = I2CTransact(ulCmdID);
     //
     // Decrement the count and increment the data pointer
     // to facilitate the next transfer
@@ -295,15 +456,55 @@ I2C_IF_Read(unsigned char ucDevAddr,
             //
             // Continue the reception
             //
-            RET_IF_ERR(I2CTransact(I2C_MASTER_CMD_BURST_RECEIVE_CONT));
+            myReturn = I2CTransact(I2C_MASTER_CMD_BURST_RECEIVE_CONT);
         }
         else
         {
             //
             // Complete the last reception
             //
-            RET_IF_ERR(I2CTransact(I2C_MASTER_CMD_BURST_RECEIVE_FINISH));
+            myReturn = I2CTransact(I2C_MASTER_CMD_BURST_RECEIVE_FINISH);
         }
+    }
+    int repeatCounter = 0;
+    while (myReturn != SUCCESS && repeatCounter++ < 4)
+    {
+        MAP_I2CMasterSlaveAddrSet(I2C_BASE, _o_ucDevAddr, true);
+        myReturn = I2CTransact(_o_ulCmdID);
+        ucLen = _o_ucLen;
+        ucLen--;
+        pucData = _o_pucData;
+        //
+        // Loop until the completion of reception or error
+        //
+        while(ucLen)
+        {
+            //
+            // Receive the byte over I2C
+            //
+            *pucData = MAP_I2CMasterDataGet(I2C_BASE);
+            //
+            // Decrement the count and increment the data pointer
+            // to facilitate the next transfer
+            //
+            ucLen--;
+            pucData++;
+            if(ucLen)
+            {
+                //
+                // Continue the reception
+                //
+                myReturn = I2CTransact(I2C_MASTER_CMD_BURST_RECEIVE_CONT);
+            }
+            else
+            {
+                //
+                // Complete the last reception
+                //
+                myReturn = I2CTransact(I2C_MASTER_CMD_BURST_RECEIVE_FINISH);
+            }
+        }
+        RET_IF_ERR(myReturn);
     }
     //
     // Receive the byte over I2C
