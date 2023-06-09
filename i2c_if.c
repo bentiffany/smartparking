@@ -40,6 +40,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <limits.h>
 
 // Driverlib includes
 #include "hw_types.h"
@@ -59,6 +60,14 @@
 
 // extra includes
 #include "lights_sensors.h"
+#include "timers_and_interrupts.h"
+
+// external variables
+extern volatile unsigned long g_ulTimerInts;
+extern volatile bool is_stuck;
+
+// local variables
+static unsigned long ref_count = 0;
 
 //*****************************************************************************
 //                      MACRO DEFINITIONS
@@ -107,6 +116,10 @@ I2CTransact(unsigned long ulCmd)
     //
     MAP_I2CMasterTimeoutSet(I2C_BASE, I2C_TIMEOUT_VAL);
 
+    ref_count = g_ulTimerInts;
+    unsigned long current_count;
+    int difference = 0;
+
     //
     // Initiate the transfer.
     //
@@ -123,8 +136,15 @@ I2CTransact(unsigned long ulCmd)
         {
             return FAILURE;
         }
-        if ((MAP_I2CMasterIntStatusEx(I2C_BASE, false) & I2C_MASTER_INT_NACK) > 0)
+        current_count = g_ulTimerInts;
+        if (current_count < ref_count) {
+            difference = (ULONG_MAX - ref_count) + current_count;
+        } else {
+            difference = current_count - ref_count;
+        }
+        if (difference > 2 && (MAP_I2CMasterIntStatusEx(I2C_BASE, false) & I2C_MASTER_INT_NACK) > 0)
         {
+            is_stuck = true;
             return -2; // -2 for NACK
         }
     }
@@ -180,6 +200,10 @@ I2CTransactNACKProof(unsigned long ulCmd)
     //
     MAP_I2CMasterIntClear(I2C_BASE);
 
+    ref_count = g_ulTimerInts;
+    unsigned long current_count;
+    int difference = 0;
+
     //
     // Set the time-out. Not to be used with breakpoints.
     //
@@ -201,8 +225,15 @@ I2CTransactNACKProof(unsigned long ulCmd)
         {
             return FAILURE;
         }
-        if ((MAP_I2CMasterIntStatusEx(I2C_BASE, false) & I2C_MASTER_INT_NACK) > 0)
+        current_count = g_ulTimerInts;
+        if (current_count < ref_count) {
+            difference = (ULONG_MAX - ref_count) + current_count;
+        } else {
+            difference = current_count - ref_count;
+        }
+        if (difference > 2 && (MAP_I2CMasterIntStatusEx(I2C_BASE, false) & I2C_MASTER_INT_NACK) > 0)
         {
+            is_stuck = true;
             return -2; // -2 for NACK
         }
     }
