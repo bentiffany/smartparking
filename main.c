@@ -59,7 +59,6 @@
 #include "hw_memmap.h"
 #include "hw_common_reg.h"
 #include "hw_uart.h"
-#include "hw_i2c.h"
 #include "prcm.h"
 #include "rom.h"
 #include "rom_map.h"
@@ -94,7 +93,6 @@ extern bool update_garage_commands;
 extern long lNetworkingRetVal;
 extern volatile bool check_parking_spaces;
 extern volatile bool check_commands;
-extern volatile bool is_stuck;
 
 //*****************************************************************************
 //                      MACRO DEFINITIONS
@@ -332,38 +330,6 @@ main(void)
         {
             // parse and run the updated commands
             executeCommands();
-        }
-
-        if (is_stuck)
-        {
-            // FULL I2C DEVICE RESET
-            MAP_I2CMasterIntClear(I2CA0_BASE);
-
-            MAP_I2CMasterDisable(I2CA0_BASE);
-
-
-            MAP_PRCMPeripheralClkDisable(PRCM_I2CA0, PRCM_RUN_MODE_CLK);
-
-            MAP_UtilsDelay(100);
-
-            MAP_PRCMPeripheralClkEnable(PRCM_I2CA0, PRCM_RUN_MODE_CLK);
-            MAP_PRCMPeripheralReset(PRCM_I2CA0);
-
-            MAP_I2CMasterEnable(I2CA0_BASE);
-
-            // reset I2C devices
-            resetI2CDevices();
-
-            // Clear all interrupts.
-            MAP_I2CMasterIntClear(I2CA0_BASE);
-
-            // Enable interrupts.
-            MAP_I2CMasterIntEnableEx(I2CA0_BASE,
-                                     I2C_MASTER_INT_TIMEOUT |        // timeout
-                                     I2C_MASTER_INT_DATA            // data transaction complete
-                                    );
-
-            MAP_I2CMasterInitExpClk(I2CA0_BASE,SYS_CLK,true);
         }
     }
     // close TLS and return - commented out so that the compiler

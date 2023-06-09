@@ -291,54 +291,116 @@ I2C_IF_Write(unsigned char ucDevAddr,
     RETERR_IF_TRUE(pucData == NULL);
     RETERR_IF_TRUE(ucLen == 0);
 
-    //
-    // Set I2C codec slave address
-    //
-    MAP_I2CMasterSlaveAddrSet(I2C_BASE, ucDevAddr, false);
-    //
-    // Write the first byte to the controller.
-    //
-    MAP_I2CMasterDataPut(I2C_BASE, *pucData);
-    //
-    // Initiate the transfer.
-    //
-    int myReturn = I2CTransactNACKProof(I2C_MASTER_CMD_BURST_SEND_START);
-    RET_IF_ERR(myReturn);
-    //
-    // Decrement the count and increment the data pointer
-    // to facilitate the next transfer
-    //
-    ucLen--;
-    pucData++;
-    //
-    // Loop until the completion of transfer or error
-    //
-    while(ucLen)
+    unsigned char _o_ucDevAddr = ucDevAddr;
+    unsigned char * _o_pucData = pucData;
+    unsigned char _o_ucLen = ucLen;
+    unsigned char _o_ucStop = ucStop;
+    int myReturn = 0;
+    int repeatTimes = 0;
+
+    do
     {
+        if (myReturn != 0)
+        {
+            ++repeatTimes;
+            MAP_UtilsDelay(10000);
+            myReturn = 0;
+        }
+        if (myReturn != 0 && repeatTimes > 2)
+        {
+            // Reset everything, this is a repeated loop
+            // FULL DEVICE RESET
+            MAP_I2CMasterIntClear(I2C_BASE);
+
+            MAP_I2CMasterDisable(I2C_BASE);
+            MAP_PRCMPeripheralReset(PRCM_I2CA0);
+
+            MAP_I2CMasterEnable(I2C_BASE);
+
+            // reset I2C devices
+            resetI2CDevices();
+
+            // Clear all interrupts.
+            MAP_I2CMasterIntClear(I2C_BASE);
+
+            // Enable interrupts.
+            MAP_I2CMasterIntEnableEx(I2C_BASE,
+                                     I2C_MASTER_INT_TIMEOUT |        // timeout
+                                     I2C_MASTER_INT_DATA            // data transaction complete
+                                    );
+
+            MAP_I2CMasterInitExpClk(I2C_BASE,SYS_CLK,true);
+
+            if (repeatTimes > 10)
+            {
+                return FAILURE;
+            }
+
+        }
+        ucDevAddr = _o_ucDevAddr;
+        pucData = _o_pucData;
+        ucLen = _o_ucLen;
+        ucStop = _o_ucStop;
         //
-        // Write the next byte of data
+        // Set I2C codec slave address
+        //
+        MAP_I2CMasterSlaveAddrSet(I2C_BASE, ucDevAddr, false);
+        //
+        // Write the first byte to the controller.
         //
         MAP_I2CMasterDataPut(I2C_BASE, *pucData);
         //
-        // Transact over I2C to send byte
+        // Initiate the transfer.
         //
-        myReturn = I2CTransactNACKProof(I2C_MASTER_CMD_BURST_SEND_CONT);
-        RET_IF_ERR(myReturn);
+        myReturn = I2CTransactNACKProof(I2C_MASTER_CMD_BURST_SEND_START);
+        if (myReturn != 0)
+        {
+            continue;
+        }
         //
         // Decrement the count and increment the data pointer
         // to facilitate the next transfer
         //
         ucLen--;
         pucData++;
-    }
+        //
+        // Loop until the completion of transfer or error
+        //
+        while(ucLen)
+        {
+            //
+            // Write the next byte of data
+            //
+            MAP_I2CMasterDataPut(I2C_BASE, *pucData);
+            //
+            // Transact over I2C to send byte
+            //
+            myReturn = I2CTransactNACKProof(I2C_MASTER_CMD_BURST_SEND_CONT);
+            if (myReturn != 0)
+            {
+                break;
+            }
+            //
+            // Decrement the count and increment the data pointer
+            // to facilitate the next transfer
+            //
+            ucLen--;
+            pucData++;
+        }
+        if (myReturn != 0)
+        {
+            // restart transaction
+            continue;
+        }
+        //
+        // If stop bit is to be sent, send it.
+        //
+        if(ucStop == true)
+        {
+            RET_IF_ERR(I2CTransactNACKProof(I2C_MASTER_CMD_BURST_SEND_STOP));
+        }
+    } while (myReturn != 0 && myReturn >= -3 && myReturn <= -2);
     RET_IF_ERR(myReturn);
-    //
-    // If stop bit is to be sent, send it.
-    //
-    if(ucStop == true)
-    {
-        RET_IF_ERR(I2CTransactNACKProof(I2C_MASTER_CMD_BURST_SEND_STOP));
-    }
 
     return SUCCESS;
 }
@@ -391,12 +453,15 @@ I2C_IF_Read(unsigned char ucDevAddr,
         //
         ulCmdID = I2C_MASTER_CMD_BURST_RECEIVE_START;
     }
+    unsigned char _o_ucDevAddr = ucDevAddr;
+    unsigned char * _o_pucData = pucData;
+    unsigned char _o_ucLen = ucLen;
+    unsigned long _o_ulCmdID = ulCmdID;
     //
     // Initiate the transfer.
     //
 
     myReturn = I2CTransact(ulCmdID);
-    RET_IF_ERR(myReturn);
     //
     // Decrement the count and increment the data pointer
     // to facilitate the next transfer
@@ -423,7 +488,6 @@ I2C_IF_Read(unsigned char ucDevAddr,
             // Continue the reception
             //
             myReturn = I2CTransact(I2C_MASTER_CMD_BURST_RECEIVE_CONT);
-            RET_IF_ERR(myReturn);
         }
         else
         {
@@ -431,8 +495,47 @@ I2C_IF_Read(unsigned char ucDevAddr,
             // Complete the last reception
             //
             myReturn = I2CTransact(I2C_MASTER_CMD_BURST_RECEIVE_FINISH);
-            RET_IF_ERR(myReturn);
         }
+    }
+    int repeatCounter = 0;
+    while (myReturn != SUCCESS && repeatCounter++ < 4)
+    {
+        MAP_I2CMasterSlaveAddrSet(I2C_BASE, _o_ucDevAddr, true);
+        myReturn = I2CTransact(_o_ulCmdID);
+        ucLen = _o_ucLen;
+        ucLen--;
+        pucData = _o_pucData;
+        //
+        // Loop until the completion of reception or error
+        //
+        while(ucLen)
+        {
+            //
+            // Receive the byte over I2C
+            //
+            *pucData = MAP_I2CMasterDataGet(I2C_BASE);
+            //
+            // Decrement the count and increment the data pointer
+            // to facilitate the next transfer
+            //
+            ucLen--;
+            pucData++;
+            if(ucLen)
+            {
+                //
+                // Continue the reception
+                //
+                myReturn = I2CTransact(I2C_MASTER_CMD_BURST_RECEIVE_CONT);
+            }
+            else
+            {
+                //
+                // Complete the last reception
+                //
+                myReturn = I2CTransact(I2C_MASTER_CMD_BURST_RECEIVE_FINISH);
+            }
+        }
+        RET_IF_ERR(myReturn);
     }
     //
     // Receive the byte over I2C
