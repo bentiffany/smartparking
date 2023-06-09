@@ -64,7 +64,6 @@ bool update_garage_commands = false;
 bool spaces_status_changed = false;
 volatile bool ready_for_cleanup = false;
 char incoming_command[MAX_CHAR_SIZE];
-volatile bool is_stuck = false;
 
 // external variables from timers_and_interrupts
 extern volatile unsigned long g_ulTimerInts;
