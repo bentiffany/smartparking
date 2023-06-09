@@ -232,7 +232,7 @@ BoardInit(void)
 //*****************************************************************************
 int
 main(void)
-{
+ {
 
     // Initialize board configurations
     BoardInit();
@@ -248,15 +248,6 @@ main(void)
     MAP_PRCMPeripheralClkEnable(PRCM_GSPI,PRCM_RUN_MODE_CLK);
 
     //
-    // I2C Init
-    //
-    I2C_IF_Open(I2C_MASTER_MODE_FST);
-
-    // Test all of the I2C devices
-    testStatusLEDs();
-//    initProximitySensors();
-
-    //
     // Initializing the Terminal.
     //
     InitTerm();
@@ -266,10 +257,20 @@ main(void)
     ClearTerm();
     DisplayBanner(APP_NAME);
 
-    // custom device initializations
-    initTimers();
+    MAP_UtilsDelay(80000);
 
-    initGPIOInterrupt();
+    //
+    // I2C Init
+    //
+    I2C_IF_Open(I2C_MASTER_MODE_FST);
+
+    MAP_UtilsDelay(10000);
+
+    // Test all of the I2C devices
+    testStatusLEDs();
+    Report("\n\rinitProximitySensors\n\r");
+    initProximitySensors();
+    Report("\n\rend initProximitySensors\n\r");
 
     OLED_Init();
     // clear screen
@@ -294,14 +295,10 @@ main(void)
         ERR_PRINT(lNetworkingRetVal);
     }
 
-    // quick checkoff test
-    char myMessage[] = "6";
-    int returnStatus = updateShadowStatus((const char*) myMessage);
-    if (returnStatus != 0)
-    {
-        // there was an error
-        Report("There was an error updating the shadow status");
-    }
+    // timer/interrupt initializations
+    initTimers();
+
+    initGPIOInterrupt();
 
     // Loop forever while the timers run.
     //
@@ -313,12 +310,15 @@ main(void)
         if (check_parking_spaces)
         {
             // run a quick sensor poll
+            Report("\n\rcheckSensorStatuses\n\r");
             checkSensorStatuses();
+            Report("\n\rend checkSensorStatuses\n\r");
         }
         if (spaces_status_changed)
         {
             // process the updated parking space status
             processSensorUpdates();
+            drawInfo();
         }
         if (check_commands)
         {

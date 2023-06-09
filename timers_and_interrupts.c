@@ -37,7 +37,6 @@
 
 
 // local variables
-static bool reading_data = false, data_read_finished = false;
 static unsigned long current_count = 0;
 
 // accessible variables
@@ -65,9 +64,6 @@ fastTimerIntHandler(void)
     Timer_IF_InterruptClear(ulFastBase);
 
     g_ulTimerInts++;
-
-    // Set a flag to check the parking space statuses
-    check_parking_spaces = true;
 }
 
 
@@ -80,6 +76,9 @@ slowTimerIntHandler(void)
 
     // Set a flag to check incoming messages
     check_commands = true;
+
+    // Set a flag to check the parking space statuses
+    check_parking_spaces = true;
 }
 
 
@@ -141,7 +140,7 @@ void initGPIOInterrupt()
     MAP_GPIOIntClear(IR_GPIO_BASE, status);
 
     // enable interrupt
-    MAP_GPIOIntEnable(IR_GPIO_BASE, IR_PIN_OFFSET);
+    // MAP_GPIOIntEnable(IR_GPIO_BASE, IR_PIN_OFFSET);
 
 }
 

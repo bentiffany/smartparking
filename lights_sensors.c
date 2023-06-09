@@ -52,7 +52,7 @@ unsigned int color_options[NUM_COLORS] = {WHITE, BLUE, GREEN, CYAN, RED, MAGENTA
 // sensor variables
 unsigned int free_spaces = NUM_SPACES, num_cars = 0;
 bool occupied_spaces[NUM_SPACES];
-unsigned short int spaces_map[NUM_SPACES] = {1, 7, 6, 3, 5, 4, 2, 0};
+bool prev_occupied_spaces[NUM_SPACES];
 
 // variables for composing the content string for HTTP POST
 unsigned char * outgoing_message_string = NULL;
@@ -198,7 +198,7 @@ void initProximitySensors(void)
     int iRetVal = 0;
 
     // read in the current statuses
-    for (i = NUM_SPACES - 1; i >= 0; --i)
+    for (i = 0; i < NUM_SPACES; ++i)
     {
         // set switch to access device i
         *dataPtr = (unsigned char) (1UL << i);
@@ -208,7 +208,8 @@ void initProximitySensors(void)
         // initialize the sensor
         Adafruit_VCNL4010_begin();
 
-        // configuration updated
+        // configuration updated, add a short pause
+        MAP_UtilsDelay(20000);
     }
 
 }
@@ -222,35 +223,44 @@ void checkSensorStatuses(void)
     bool status_has_changed = false;
 
     unsigned char ucI2CSwitchAddr = I2C_SWITCH_ADDR;
-    unsigned char currentSensorAddr = BASE_LIGHT_SENSOR_ADDR, ucSensorRegOffset = 0x80;
-    unsigned char dataBuf[16];
+    unsigned char currentSensor = 0;
+    uint16_t sensor_readings[NUM_SPACES];
     int iRetVal = 0;
 
-    // return for now
-    return;
+    // for debugging
+    char string[MAX_CHAR_SIZE];
 
     // read in the current statuses
-    for (i = NUM_SPACES - 1; i >= 0; --i)
+    for (i = 0; i < NUM_SPACES; ++i)
     {
-
+        currentSensor = (unsigned char) (1UL << i);
         // shift address to the right by 1 for the 7-bit address
-        iRetVal = I2C_IF_Write(ucI2CSwitchAddr >> 1, &dataBuf, 1, true);
-        if (iRetVal != 0) {Report("Error writing sensor selection to io expander");};
-        // set switch to access device i
-        dataBuf[0] = (unsigned char)i;
-        iRetVal = I2C_IF_Write(ucI2CSwitchAddr, &dataBuf, 1, 0);
+        iRetVal = I2C_IF_Write(ucI2CSwitchAddr, &currentSensor, 1, true);
         if (iRetVal != 0) {Report("Error writing sensor selection to I2C switch");};
-        // write through to the sensor
-        iRetVal = I2C_IF_Write(currentSensorAddr, &ucSensorRegOffset, 1, 0);
-        if (iRetVal != 0) {Report("Error writing register selection to sensor");};
-        // read in the entire register
-        iRetVal = I2C_IF_Read(currentSensorAddr, &dataBuf, (unsigned char) 16);
-        if (iRetVal != 0) {Report("Error with read");};
-        // now trigger the sensor read
 
+        // now read a proximity reading
+        sensor_readings[i] = Adafruit_VCNL4010_readProximity();
+
+        // I2C doesn't like switching too quickly... add a short pause
+        MAP_UtilsDelay(1000);
     }
 
-    // compare each one, and change the flag if they've changed
+    for (i = 0; i < NUM_SPACES; ++i)
+    {
+        // compare the new sensor readings with the old ones
+        prev_occupied_spaces[i] = occupied_spaces[i];
+        occupied_spaces[i] = sensor_readings[i] > PROX_THRESHOLD;
+        if (occupied_spaces[i] != prev_occupied_spaces[i])
+        {
+            status_has_changed = true;
+        }
+    }
+
+    for (i = 0; i < NUM_SPACES; ++i)
+    {
+        sprintf(string, "\n\rProximity %i: %d", i + 1, sensor_readings[i]);
+        Report(string);
+    }
 
     // if the status has changed, update the appropriate flag
     if (status_has_changed)
@@ -273,6 +283,9 @@ void processSensorUpdates(void)
         // ignore sensor update processing
         return;
     }
+
+    // unset flag
+    spaces_status_changed = false;
 
     // change the LEDs that are lit
     updateStatusLEDs();
@@ -303,29 +316,38 @@ void updateStatusLEDs(void)
 {
 
     // update the status LEDs
-    int i = NUM_SPACES - 1;
+    int i;
 
     unsigned char ucI2CSwitchAddr = BASE_LIGHT_SWITCH_ADDR;
-    unsigned char dataBuf = 0x00;
+    unsigned char dataBuf[2];
+    dataBuf[0] = 0x00;
+    unsigned char *dataPtr = dataBuf;
     int iRetVal = 0;
 
     // read in the current statuses
 
-    for (i; i >= 0; --i)
+    for (i = 0; i < NUM_SPACES; ++i)
     {
         // loop through each light, setting it's state
         // green is high, red is low
         if (!occupied_spaces[i])
         {
-            dataBuf |= (1<<i);
+            dataBuf[0] |= (1<<i);
         }
     }
+    dataBuf[1] = dataBuf[0];
+
+    // for debugging
+    char string[MAX_CHAR_SIZE];
 
     // write light selection, also
     // shift address to the right by 1 for the 7-bit address
-    iRetVal = I2C_IF_Write(ucI2CSwitchAddr >> 1, &dataBuf, 1, true);
-    if (iRetVal != 0) {Report("Error writing sensor selection to io expander");};
-
+    iRetVal = I2C_IF_Write(ucI2CSwitchAddr, dataPtr, 1, true);
+    if (iRetVal != 0) {
+        Report("Error writing led selection to io expander");
+        sprintf(string, "\n\rThe specific error return value was: %i\n\r", iRetVal);
+        Report(string);
+    }
 }
 
 
@@ -338,11 +360,16 @@ void testStatusLEDs(void)
     {
         occupied_spaces[m] = 0;
     }
+
+    // light the all green status
+    updateStatusLEDs();
+    MAP_UtilsDelay(5000000);
+
     for (m = 0; m < NUM_SPACES; ++m)
     {
-        occupied_spaces[spaces_map[m]] = 1;
+        occupied_spaces[m] = 1;
         updateStatusLEDs();
-        MAP_UtilsDelay(2500000);
+        MAP_UtilsDelay(3500000);
     }
     for(m = 0; m < NUM_SPACES; ++m)
     {

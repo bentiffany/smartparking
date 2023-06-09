@@ -30,21 +30,25 @@
 #include "stdlib.h"
 #include "stdbool.h"
 #include "stdint.h"
+#include "stdio.h"
 
 // library includes
+#include "hw_types.h"
 #include "rom.h"
 #include "rom_map.h"
 #include "hw_i2c.h"
 #include "i2c.h"
 #include "utils.h"
+#include "uart.h"
 
 // interface includes
 #include "i2c_if.h"
+#include "uart_if.h"
 
 #include "Adafruit_VCNL4010.h"
 
 // local variables
-static Adafruit_I2CDevice *i2c_dev;
+// static Adafruit_I2CDevice *i2c_dev;
 static unsigned char vcnl_addr = VCNL4010_I2CADDR_DEFAULT; // I2C default address
 
 
@@ -59,13 +63,13 @@ static unsigned char vcnl_addr = VCNL4010_I2CADDR_DEFAULT; // I2C default addres
 */
 /**************************************************************************/
 bool Adafruit_VCNL4010_begin() {
-    if (i2c_dev)
-    {
-        free (i2c_dev);
-        i2c_dev = NULL;
-    }
-    i2c_dev = malloc(sizeof(Adafruit_I2CDevice));
-    i2c_dev->addr = vcnl_addr;
+//    if (i2c_dev)
+//    {
+//        free (i2c_dev);
+//        i2c_dev = NULL;
+//    }
+//    i2c_dev = malloc(sizeof(Adafruit_I2CDevice));
+//    i2c_dev->addr = vcnl_addr;
 
     uint8_t rev = Adafruit_VCNL4010_read8(VCNL4010_PRODUCTID);
     if ((rev & 0xF0) != 0x20) {
@@ -81,8 +85,8 @@ bool Adafruit_VCNL4010_begin() {
     param = 6 << 4; // 8 samples / second
     param |= 1UL << 7; // continuous conversion mode (faster)
     param |= 1UL << 3; // automatic offset compensation
-    param |= 5; // 2^5 = 32 measurements averaged for result
-    Adafruit_VCNL4010_write8(VCNL4010_AMBIENTPARAMETER, param);
+    param |= 2; // 2^2 = 4 measurements averaged for result
+    // Adafruit_VCNL4010_write8(VCNL4010_AMBIENTPARAMETER, param);
     return true;
 }
 
@@ -209,16 +213,19 @@ uint16_t Adafruit_VCNL4010_readProximity(void) {
   uint8_t i = Adafruit_VCNL4010_read8(VCNL4010_INTSTAT);
   i &= ~0x80;
   Adafruit_VCNL4010_write8(VCNL4010_INTSTAT, i);
+  MAP_UtilsDelay(1000);
 
   Adafruit_VCNL4010_write8(VCNL4010_COMMAND, VCNL4010_MEASUREPROXIMITY);
+  MAP_UtilsDelay(1000);
   while (1) {
     // Serial.println(Adafruit_VCNL4010_read8(VCNL4010_INTSTAT), HEX);
     uint8_t result = Adafruit_VCNL4010_read8(VCNL4010_COMMAND);
     // Serial.print("Ready = 0x"); Serial.println(result, HEX);
     if (result & VCNL4010_PROXIMITYREADY) {
+      MAP_UtilsDelay(100);
       return Adafruit_VCNL4010_read16(VCNL4010_PROXIMITYDATA);
     }
-    MAP_UtilsDelay(10000);
+    MAP_UtilsDelay(500);
   }
 }
 
@@ -242,7 +249,6 @@ uint16_t Adafruit_VCNL4010_readAmbient(void) {
     if (result & VCNL4010_AMBIENTREADY) {
       return Adafruit_VCNL4010_read16(VCNL4010_AMBIENTDATA);
     }
-    MAP_UtilsDelay(10000);
   }
 }
 
@@ -254,23 +260,39 @@ uint16_t Adafruit_VCNL4010_readAmbient(void) {
 
 // Read 1 byte from the VCNL4000 at 'address'
 uint8_t Adafruit_VCNL4010_read8(uint8_t address) {
-  unsigned char buffer = address;
-  I2C_IF_ReadFrom(vcnl_addr,
-                &buffer,
-                (unsigned char) 1,
-                &buffer,
-                (unsigned char) 1);
+  unsigned char buffer = (unsigned char) address;
+  int iRetVal;
+  iRetVal = I2C_IF_ReadFrom(vcnl_addr,
+                        &buffer,
+                        (unsigned char) 1,
+                        &buffer,
+                        (unsigned char) 1);
+  if (iRetVal != 0)
+  {
+      // print out an error message
+      char err_message[50];
+      sprintf(err_message, "There was an error in read8: %i", iRetVal);
+      Report(err_message);
+  }
   return buffer;
 }
 
 // Read 2 byte from the VCNL4010 at 'address'
 uint16_t Adafruit_VCNL4010_read16(uint8_t address) {
-    unsigned char buffer[2] = {address, 0};
-    I2C_IF_ReadFrom(vcnl_addr,
-                (unsigned char *)&buffer,
-                (unsigned char) 1,
-                (unsigned char *)&buffer,
-                (unsigned char) 2);
+    unsigned char buffer[2] = {(unsigned char) address, 0x00};
+    int iRetVal;
+    iRetVal = I2C_IF_ReadFrom(vcnl_addr,
+                        (unsigned char *)&buffer,
+                        (unsigned char) 1,
+                        (unsigned char *)&buffer,
+                        (unsigned char) 2);
+    if (iRetVal != 0)
+    {
+        // print out an error message
+        char err_message[50];
+        sprintf(err_message, "There was an error in read16: %i", iRetVal);
+        Report(err_message);
+    }
     uint16_t result = ((uint16_t) buffer[0]) << 8;
     result |= (uint16_t) buffer[1];
     return result;
@@ -279,8 +301,16 @@ uint16_t Adafruit_VCNL4010_read16(uint8_t address) {
 // write 1 byte
 void Adafruit_VCNL4010_write8(uint8_t address, uint8_t data) {
     uint8_t buffer[2] = {address, data};
-    I2C_IF_Write(vcnl_addr,
-                (unsigned char *) &buffer,
-                (unsigned char) 2,
-                true);
+    int iRetVal;
+    iRetVal = I2C_IF_Write(vcnl_addr,
+                        (unsigned char *) &buffer,
+                        (unsigned char) 2,
+                        true);
+    if (iRetVal != 0)
+    {
+        // print out an error message
+        char err_message[50];
+        sprintf(err_message, "There was an error in write8: %i", iRetVal);
+        Report(err_message);
+    }
 }
