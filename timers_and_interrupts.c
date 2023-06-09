@@ -75,7 +75,7 @@ slowTimerIntHandler(void)
     Timer_IF_InterruptClear(ulSlowBase);
 
     // Set a flag to check incoming messages
-    check_commands = true;
+    check_commands = false;
 
     // Set a flag to check the parking space statuses
     check_parking_spaces = true;
